@@ -4,10 +4,12 @@ This private npm workspace contains two independent MCP stdio servers. They
 are separate packages, separate executable processes, and separate published
 identities:
 
-- [`mcp-opencode`](./packages/mcp-opencode) preserves the existing
-  `mcp-opencode` package and delegates to the OpenCode CLI.
-- [`mcp-grok`](./packages/mcp-grok) wraps the installed Grok Build CLI and
-  publishes as `mcp-grok`.
+- [`mcp-opencode`](./packages/mcp-opencode) delegates to the OpenCode CLI.
+  Published on npm: [`mcp-opencode`](https://www.npmjs.com/package/mcp-opencode).
+- [`mcp-grok`](./packages/mcp-grok) wraps the installed Grok Build CLI.
+  Published on npm: [`mcp-grok`](https://www.npmjs.com/package/mcp-grok).
+
+Both servers are published and installable directly via `npx` (see below).
 
 Neither server is a combined router, and there is deliberately no shared core
 package yet. Each package owns its CLI adapter, policy, parser, queue, tests,
