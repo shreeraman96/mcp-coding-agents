@@ -11,24 +11,30 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
+import { validateCwd as coreValidateCwd } from "@mcp-coding-agents/core/cwd.js";
+import { boundText } from "@mcp-coding-agents/core/text.js";
+import { isEmptyResult } from "@mcp-coding-agents/core/types.js";
+import { CwdQueue } from "@mcp-coding-agents/core/queue.js";
 import {
   DEFAULT_MAX_TURNS,
   DEFAULT_TIMEOUT_SEC,
   MAX_TURNS,
   MODEL_RE,
   SESSION_RE,
-  boundText,
   classifyError,
-  isEmptyResult,
   redact,
-  validateCwd,
-} from "./policy.js";
-import { CwdQueue } from "./queue.js";
-import { runGrok, type GrokRunMode } from "./run.js";
+  runGrok,
+  type GrokRunMode,
+} from "@mcp-coding-agents/core/backends/grok.js";
 
 const execFileP = promisify(execFile);
 const queue = new CwdQueue();
 const CLI_OUTPUT_CAP = 12_000;
+const ROOTS_ENV_VAR = "GROK_MCP_ROOTS";
+
+function validateCwd(cwd: string) {
+  return coreValidateCwd(cwd, { rootsEnvVar: ROOTS_ENV_VAR, requireRootIsDirectory: true });
+}
 
 function toolError(message: string) {
   return { content: [{ type: "text" as const, text: message }], isError: true };

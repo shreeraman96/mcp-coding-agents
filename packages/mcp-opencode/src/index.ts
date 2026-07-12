@@ -1,16 +1,36 @@
 #!/usr/bin/env node
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-import { validateCwd, redact, classifyError, isEmptyResult, boundText, MODEL_RE, SESSION_RE } from "./policy.js";
-import { runOpencode, type Agent } from "./run.js";
-import { CwdQueue } from "./queue.js";
-import type { ParsedResult } from "./parse.js";
+import { validateCwd as coreValidateCwd } from "@mcp-coding-agents/core/cwd.js";
+import { boundText } from "@mcp-coding-agents/core/text.js";
+import { isEmptyResult } from "@mcp-coding-agents/core/types.js";
+import { CwdQueue } from "@mcp-coding-agents/core/queue.js";
+import {
+  MODEL_RE,
+  SESSION_RE,
+  classifyError,
+  classifyOpencode,
+  describeOpencodeFailure,
+  redact,
+  runOpencode,
+  type Agent,
+  type ParsedResult,
+} from "@mcp-coding-agents/core/backends/opencode.js";
 
 const execFileP = promisify(execFile);
+
+const ROOTS_ENV_VAR = "OPENCODE_MCP_ROOTS";
+
+function validateCwd(cwd: string) {
+  return coreValidateCwd(cwd, { rootsEnvVar: ROOTS_ENV_VAR, requireRootIsDirectory: false });
+}
 
 const queue = new CwdQueue();
 
@@ -158,8 +178,15 @@ async function executeRun(
 
     // reason === 'exit'
     if (exitCode !== 0) {
-      const classified = classifyError(stderrTail, args.model);
-      const message = classified ?? `opencode exited with code ${exitCode}`;
+      // Structured classification (from stdout `type:"error"` events; see
+      // docs/phase0-capacity-signals.md) takes priority, falling back to the
+      // legacy stderr-text classifier and then a generic message -- matching
+      // pre-refactor behavior for cases structured classification can't see.
+      const structured = classifyOpencode({ reason, stderrTail, parsed });
+      const message =
+        describeOpencodeFailure(structured, args.model) ??
+        classifyError(stderrTail, args.model) ??
+        `opencode exited with code ${exitCode}`;
       return toolError(
         [`status: error`, message, ...header, `stderr tail:\n${stderrTail}`].join("\n"),
       );
@@ -314,12 +341,22 @@ async function main() {
   await server.connect(transport);
 }
 
-if (process.argv.includes("--help") || process.argv.includes("-h")) {
-  console.log("mcp-opencode: MCP stdio server for the OpenCode CLI");
-  console.log("Usage: mcp-opencode");
-} else {
-  main().catch((err) => {
-    console.error("Fatal error starting mcp-opencode:", err);
-    process.exit(1);
-  });
+let isMainModule = false;
+if (process.argv[1] !== undefined) {
+  try {
+    isMainModule = realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    isMainModule = path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  }
+}
+if (isMainModule) {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    console.log("mcp-opencode: MCP stdio server for the OpenCode CLI");
+    console.log("Usage: mcp-opencode");
+  } else {
+    main().catch((err) => {
+      console.error("Fatal error starting mcp-opencode:", err);
+      process.exit(1);
+    });
+  }
 }

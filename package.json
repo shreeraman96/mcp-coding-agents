@@ -10,7 +10,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspace @mcp-coding-agents/core && npm run build --workspaces --if-present",
+    "pretest": "npm run build --workspace @mcp-coding-agents/core",
     "test": "npm test --workspaces --if-present",
     "smoke": "npm run smoke --workspace mcp-opencode",
     "pack:opencode": "npm pack --workspace mcp-opencode --dry-run",
