@@ -34,7 +34,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsup",
+    "pretest": "npm run build --workspace @mcp-coding-agents/core --if-present",
     "test": "vitest run",
     "smoke": "node scripts/smoke.mjs",
     "prepublishOnly": "npm run build"
@@ -47,7 +48,9 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@mcp-coding-agents/core": "0.1.0",
     "typescript": "^5.6.2",
+    "tsup": "^8.5.1",
     "vitest": "^2.1.4",
     "@types/node": "^20.14.0"
   }
