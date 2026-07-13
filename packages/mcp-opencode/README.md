@@ -62,7 +62,7 @@ connects. The tools appear as `opencode_run`, `opencode_reply`, `opencode_models
 
 ```bash
 git clone https://github.com/shreeraman96/mcp-coding-agents.git
-cd mcp-opencode
+cd mcp-coding-agents
 npm install
 npm run build --workspace mcp-opencode
 npm test --workspace mcp-opencode          # unit tests
@@ -157,20 +157,44 @@ timeout/abort as "stop waiting", not "guaranteed nothing is still executing".
 
 ## How it works
 
-- **`src/run.ts`** spawns `opencode` detached in its own process group, so the
-  whole subprocess tree is killed as a unit (SIGTERM → 5s grace → SIGKILL) on
-  timeout, client abort, or a `maxCostUsd` breach. Process exit is treated as the
-  authoritative completion signal.
-- **`src/parse.ts`** streams the `--format json` output line-by-line without ever
+`src/index.ts` is a thin MCP shell; the runtime logic lives in the shared,
+unpublished `@mcp-coding-agents/core` package and is **bundled into `dist/` at
+build time**, so the installed package stays self-contained (its only runtime
+dependencies are the MCP SDK and `zod`).
+
+- The **runner** spawns `opencode` detached in its own process group, so the whole
+  subprocess tree is killed as a unit (SIGTERM → 5s grace → SIGKILL) on timeout,
+  client abort, or a `maxCostUsd` breach. Process exit is the authoritative
+  completion signal.
+- The **stream parser** reads `--format json` output line-by-line without ever
   buffering the raw stream; assistant text is capped to head(40k)+tail(10k) chars
-  past 50k total.
-- **`src/queue.ts`** serializes runs that share the same resolved `cwd`; different
-  working trees run concurrently.
-- **`src/policy.ts`** holds the cwd allowlist, model/session validation, secret
+  past 50k total. Structured provider error events are preserved with their
+  `name`/`statusCode` (see Changelog).
+- A **per-cwd queue** serializes runs that share the same resolved `cwd`;
+  different working trees run concurrently.
+- The **policy layer** holds the cwd allowlist, model/session validation, secret
   redaction, and error classification.
 
 For long runs, the server emits MCP progress notifications every 15s (when the
 client supplies a progress token), which resets the client's idle timeout.
+
+## Changelog
+
+### 0.1.1
+
+- **Fixed:** provider error events (rate-limit / overloaded / quota) were
+  collapsed to `"[object Object]"`, discarding the error name and HTTP status.
+  They are now surfaced with their `name` and `statusCode`, so capacity and auth
+  failures are reported distinctly instead of as an opaque error.
+- **Fixed:** AI-SDK retry-exhaustion (`"Failed after N attempts. Last error: …"`)
+  is now unwrapped to a meaningful capacity/transport message instead of an
+  opaque `Unknown`.
+- **Internal:** shared logic extracted into `@mcp-coding-agents/core` (bundled;
+  no change to the published dependency set or behavior otherwise).
+
+### 0.1.0
+
+- Initial release.
 
 ## License
 
