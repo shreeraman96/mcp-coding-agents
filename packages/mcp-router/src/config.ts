@@ -114,11 +114,20 @@ function authorize(config: RouterConfig): RouterConfig {
     ),
   ];
   for (const entry of entries) {
-    const derived = deriveProvider(entry.backend, entry.model);
-    if (entry.provider !== undefined && entry.provider !== derived) {
-      throw new Error(`declared provider disagrees with model prefix for ${entry.backend}`);
+    // deriveProvider needs a model only for opencode (provider = model prefix);
+    // grok/codex derive a fixed provider without one. An advisory entry may omit
+    // the model, so deriving for an advisory opencode entry would wrongly reject
+    // a legitimate config. Derive whenever we can; otherwise fall back to the
+    // backend name so advisory entries still carry a provider for reporting.
+    if (entry.model !== undefined || entry.backend !== "opencode") {
+      const derived = deriveProvider(entry.backend, entry.model);
+      if (entry.provider !== undefined && entry.provider !== derived) {
+        throw new Error(`declared provider disagrees with model prefix for ${entry.backend}`);
+      }
+      entry.provider = derived;
+    } else if (entry.advisory) {
+      entry.provider = entry.backend;
     }
-    entry.provider = derived;
     if (!entry.advisory && !entry.model) throw new Error(`non-advisory ${entry.backend} entry must declare a model`);
   }
 

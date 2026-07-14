@@ -9,8 +9,9 @@ separate published identities:
 - [`mcp-grok`](./packages/mcp-grok) wraps the installed Grok Build CLI.
   Published on npm: [`mcp-grok`](https://www.npmjs.com/package/mcp-grok).
 - [`mcp-router`](./packages/mcp-router) routes a coding task to a
-  user-configured model tier (light/standard/heavy) with capability filtering
-  and provably-safe cross-backend fallback. **New; not yet published.**
+  user-configured model tier (light/standard/heavy) across the opencode, grok,
+  and codex backends, with capability filtering and provably-safe cross-backend
+  fallback. Published on npm: [`mcp-router`](https://www.npmjs.com/package/mcp-router).
 
 `@mcp-coding-agents/core` is a private, never-published package that holds the
 shared run/parse/classify/redact/validateCwd runtime; it is bundled into each
@@ -26,7 +27,7 @@ npm run build
 npm test
 ```
 
-Register either published server directly with an MCP client:
+Register any published server directly with an MCP client:
 
 ```bash
 # OpenCode-backed server
@@ -34,6 +35,9 @@ npx -y mcp-opencode
 
 # Grok Build CLI-backed server
 npx -y mcp-grok
+
+# Tier router across opencode / grok / codex (configure it with `mcp-router --check`)
+npx -y mcp-router
 ```
 
 For Claude Code, add the desired server with `claude mcp add`; for Codex, use
@@ -42,6 +46,7 @@ schemas, environment variables, prerequisites, and security limitations:
 
 - [mcp-opencode setup and tools](./packages/mcp-opencode/README.md)
 - [mcp-grok setup and tools](./packages/mcp-grok/README.md)
+- [mcp-router tiers, fallback, and config](./packages/mcp-router/README.md)
 
 ## Workspace development
 
@@ -52,6 +57,8 @@ npm run build --workspace mcp-opencode
 npm test --workspace mcp-opencode
 npm run build --workspace mcp-grok
 npm test --workspace mcp-grok
+npm run build --workspace mcp-router
+npm test --workspace mcp-router
 ```
 
 The root package is private and has no `bin`, `files`, or publishable package
@@ -60,5 +67,5 @@ development.
 
 ## License
 
-The workspace and both packages are MIT licensed. Each publishable package
+The workspace and all three packages are MIT licensed. Each publishable package
 contains its own copy of [`LICENSE`](./LICENSE).

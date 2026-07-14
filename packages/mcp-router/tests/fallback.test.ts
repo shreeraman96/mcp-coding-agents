@@ -347,8 +347,9 @@ describe("runChain eligibility matrix", () => {
       entry: "standard",
       reason: "not-installed",
       provenance: "spawn",
-      editedTree: false,
     });
+    // Non-git cwd: cleanliness is unmeasurable → unknown, never a false "clean".
+    expect(result.trace[0].editedTree).toBeUndefined();
     expect(fp.settleCount).toBe(0);
     expect(b1.runCount).toBe(1);
     expect(b2.runCount).toBe(0);
@@ -522,10 +523,62 @@ describe("runChain eligibility matrix", () => {
     expect(result.trace[0]).toMatchObject({
       entry: "standard",
       reason: "unavailable",
-      editedTree: false,
     });
+    expect(result.trace[0].editedTree).toBeUndefined();
     expect(fp.settleCount).toBe(0);
     expect(b2.runCount).toBe(0);
+  });
+
+  it("a backend that THROWS (e.g. bad model shape) does not crash the route and falls back to the next candidate", async () => {
+    const thrower: Backend = {
+      name: "grok",
+      provider: () => "prov",
+      capabilities: () => new Set(),
+      detect: async () => ({ installed: true }),
+      run: async () => {
+        throw new RangeError("invalid Grok model: grok 4");
+      },
+    };
+    const b2 = new FakeBackend("opencode", [okOutcome("from-2")]);
+    const entry1 = makeEntry({ name: "standard", backend: "grok", provider: "prov", model: "prov/bad" });
+    const entry2 = makeEntry({ name: "heavy", backend: "opencode", provider: "prov", model: "prov/good" });
+    const fp = new FakeFingerprint({
+      compute: () => ({ gitTracked: true, reliable: true, value: "clean" }),
+      settle: () => ({ settled: true, fingerprint: { gitTracked: true, reliable: true, value: "clean" } }),
+      equal: () => true,
+    });
+    const deps = makeDeps({ backends: { grok: thrower as unknown as FakeBackend, opencode: b2 }, fingerprint: fp });
+
+    const result = await run([entry1, entry2], deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.servedBy?.name).toBe("heavy");
+    expect(result.trace[0]).toMatchObject({ entry: "standard", reason: "unavailable", provenance: "exit" });
+    expect(b2.runCount).toBe(1);
+  });
+
+  it("a single-entry throw is a clean terminal failure (not an uncaught crash); terminal skips the settle", async () => {
+    const thrower: Backend = {
+      name: "grok",
+      provider: () => "prov",
+      capabilities: () => new Set(),
+      detect: async () => ({ installed: true }),
+      run: async () => {
+        throw new RangeError("invalid Grok model");
+      },
+    };
+    const entry1 = makeEntry({ name: "standard", backend: "grok", provider: "prov", model: "prov/bad" });
+    const fp = new FakeFingerprint({ compute: () => ({ gitTracked: true, reliable: true, value: "clean" }) });
+    const deps = makeDeps({ backends: { grok: thrower as unknown as FakeBackend }, fingerprint: fp });
+
+    const result = await run([entry1], deps);
+
+    expect(result.ok).toBe(false);
+    expect(result.servedBy).toBeUndefined();
+    expect(result.trace).toHaveLength(1);
+    expect(result.trace[0]).toMatchObject({ entry: "standard", reason: "unavailable", provenance: "exit" });
+    expect(fp.settleCount).toBe(0); // terminal entry: no settle
+    expect(result.trace[0].editedTree).toBeUndefined();
   });
 
   it("9. cross-provider blocked when allowCrossProviderFallback=false", async () => {

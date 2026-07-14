@@ -16,7 +16,7 @@ describe("createDeadline", () => {
 });
 
 describe("attemptBudgetSec", () => {
-  it("with hasNextEntry=false returns floor(remaining - cleanupReserve)", () => {
+  it("with hasNextEntry=false uses the full remaining budget (a terminal attempt owes no cleanup reserve)", () => {
     const budget = attemptBudgetSec({
       remainingSec: 100.7,
       hasNextEntry: false,
@@ -24,8 +24,16 @@ describe("attemptBudgetSec", () => {
       cleanupReserveSec: 5,
       minViableNextSec: 20,
     });
-    expect(budget).toBe(Math.floor(100.7 - 5));
+    expect(budget).toBe(Math.floor(100.7));
     expect(Number.isInteger(budget)).toBe(true);
+  });
+
+  it("with hasNextEntry=false a schema-legal short timeout still runs (no reserve subtracted)", () => {
+    // remaining=30 with backendMin=30: the old formula subtracted a 30s reserve
+    // and returned null (refused all work); a terminal attempt must run.
+    expect(
+      attemptBudgetSec({ remainingSec: 30, hasNextEntry: false, backendMinSec: 30, cleanupReserveSec: 30, minViableNextSec: 60 }),
+    ).toBe(30);
   });
 
   it("with hasNextEntry=true also subtracts minViableNextSec", () => {

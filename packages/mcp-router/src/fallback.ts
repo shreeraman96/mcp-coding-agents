@@ -2,6 +2,7 @@ import type {
   AttemptRecord,
   Backend,
   BackendName,
+  NormalizedOutcome,
   ResolvedEntry,
   RouteResult,
 } from "./types.js";
@@ -125,15 +126,34 @@ export async function runChain(args: RunChainArgs, deps: FallbackDeps): Promise<
     const fBefore = await deps.fingerprint.compute(args.cwd);
     args.onProgress?.(`attempt ${i + 1}/${args.entries.length} · ${entry.name} · ${budget}s`);
 
-    const outcome = await deps.getBackend(entry.backend).run({
-      prompt: args.prompt,
-      cwd: args.cwd,
-      model: entry.model ?? "",
-      provider: entry.provider,
-      timeoutSec: budget,
-      signal: args.signal,
-      onHeartbeat: undefined,
-    });
+    let outcome: NormalizedOutcome;
+    try {
+      outcome = await deps.getBackend(entry.backend).run({
+        prompt: args.prompt,
+        cwd: args.cwd,
+        model: entry.model ?? "",
+        provider: entry.provider,
+        timeoutSec: budget,
+        signal: args.signal,
+        onHeartbeat: undefined,
+      });
+    } catch (err) {
+      // A backend that THROWS before/while starting (e.g. a model string that
+      // fails the backend's own shape check, throwing RangeError) must not abort
+      // the whole route. Treat it as a failed attempt that never ran: no work was
+      // produced, so the fingerprint gate below confirms the tree is clean and a
+      // later candidate can still run. `transport` makes it fallback-eligible and
+      // coarsely "unavailable"; provenance `exit` (not `spawn`) keeps the coarse
+      // reason "unavailable" rather than the misleading "not-installed" (the
+      // backend IS installed — its per-entry config is what failed).
+      outcome = {
+        ok: false,
+        errors: [{ category: "transport", provenance: "exit", message: String((err as Error).message ?? err) }],
+        text: "",
+        elapsedSec: 0,
+        exitCode: null,
+      };
+    }
 
     if (outcome.ok) {
       // Report whether the backend actually touched the tree instead of
@@ -160,8 +180,9 @@ export async function runChain(args: RunChainArgs, deps: FallbackDeps): Promise<
     const provenance = primaryProvenance(outcome.errors) ?? "exit";
     const spawnFailure = outcome.errors.some((error) => error.provenance === "spawn");
     const aborted = args.signal.aborted;
-    let editedTree: boolean;
-    let eligible: boolean;
+    const hasNext = i < args.entries.length - 1;
+    let editedTree: boolean | undefined;
+    let eligible = false;
 
     /*
      * Safety gate. EVERY post-attempt fallback requires a git-tracked cwd whose
@@ -177,21 +198,23 @@ export async function runChain(args: RunChainArgs, deps: FallbackDeps): Promise<
      * not-installed failures still fall back on a git cwd via the gate below --
      * without trusting the forgeable signal.
      */
-    if (aborted) {
-      eligible = false;
-      editedTree = false;
-    } else if (!fBefore.gitTracked) {
-      // Cannot certify cleanliness without a tracked tree.
-      eligible = false;
-      editedTree = false;
+    if (aborted || !fBefore.gitTracked || !hasNext) {
+      // No fallback decision to make here: the client aborted, the cwd is not
+      // git-tracked (cleanliness is unmeasurable), or this is the terminal
+      // candidate (nothing to fall back to). Skip the settle entirely — it only
+      // exists to certify eligibility, which is moot in all three cases — and
+      // report the tree as `undefined` ("unknown"), NEVER a false "clean". This
+      // matches the success path's guarantee and means the terminal attempt owes
+      // no cleanup reserve (see attemptBudgetSec).
+      editedTree = undefined;
     } else {
       const settle = await deps.fingerprint.settle(args.cwd, {
         stabilityMs: deps.tuning.reapStabilityMs,
         maxWaitMs: deps.tuning.reapMaxWaitMs,
       });
       if (!settle.settled) {
-        // An active writer cannot be safely handed to a second backend.
-        eligible = false;
+        // An active writer cannot be safely handed to a second backend;
+        // conservatively report the tree as dirty.
         editedTree = true;
       } else {
         editedTree = !deps.fingerprint.equal(fBefore, settle.fingerprint);

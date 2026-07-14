@@ -28,12 +28,21 @@ export function normalizeOutcome(
 
   if (core.reason === "exit" && core.exitCode === 0) {
     const hasText = text.trim().length > 0;
-    const hasError = core.errorMessages.length > 0;
-    if (!hasText && !hasError) {
-      ok = false;
-      errors.push({ category: "empty", provenance: "exit", message: `${backendLabel} returned an empty result` });
-    } else {
+    if (hasText) {
       ok = true;
+    } else {
+      // Exit 0 but no assistant text: there is no answer to hand back, so do NOT
+      // report an empty body as success (that returned blank successes to the
+      // caller). Error-channel messages present but no text is a stronger signal
+      // the run failed despite the 0 exit, so bucket it as a task failure;
+      // otherwise it is a genuine empty result.
+      ok = false;
+      const hasError = core.errorMessages.length > 0;
+      errors.push(
+        hasError
+          ? { category: "task", provenance: "exit", message: `${backendLabel} exited 0 with errors but produced no result` }
+          : { category: "empty", provenance: "exit", message: `${backendLabel} returned an empty result` },
+      );
     }
   } else if (core.reason === "exit") {
     ok = false;
@@ -41,7 +50,14 @@ export function normalizeOutcome(
       errors.push({ category: "task", provenance: "exit", message: `${backendLabel} exited with code ${core.exitCode}` });
     }
   } else if (core.reason === "timeout") {
-    ok = false; // classify* already emits a timeout error
+    // Not every classifier emits a timeout error (only classifyOpencode, which
+    // sees `reason`; classifyGrok/classifyCodex take a plain diagnostic string
+    // and cannot). Ensure a timeout category is present so the route trace and
+    // cooldown logic never mislabel a timed-out attempt as `ok`.
+    ok = false;
+    if (!errors.some((error) => error.category === "timeout")) {
+      errors.push({ category: "timeout", provenance: "timeout", message: `${backendLabel} timed out after ${Math.round(core.elapsedSec)}s` });
+    }
   } else if (core.reason === "abort") {
     ok = false; // the router detects client abort via the AbortSignal
   } else {

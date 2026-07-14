@@ -25,12 +25,15 @@ export function attemptBudgetSec(args: {
   cleanupReserveSec: number;
   minViableNextSec: number;
 }): number | null {
-  let base = args.remainingSec - args.cleanupReserveSec;
-  if (args.hasNextEntry) base -= args.minViableNextSec;
-
-  // Reserve cleanup (including fingerprint settling) and the next attempt
-  // before flooring: downstream runners require an integer timeout, and
-  // flooring prevents spending fractional seconds that are not available.
+  // Reserve the post-failure cleanup (fingerprint settle) plus the next
+  // attempt's minimum ONLY when a next candidate exists. A terminal/only
+  // attempt runs no settle (see fallback.ts's gate: it skips settling when
+  // there is nothing to fall back to), so it owes no reserve and may use the
+  // full remaining budget. Without this, a schema-legal short timeout (min 30s)
+  // on a single-entry tier would reserve 30s of cleanup it never uses and
+  // refuse to run anything. Floor before comparing: runners need an integer.
+  let base = args.remainingSec;
+  if (args.hasNextEntry) base -= args.cleanupReserveSec + args.minViableNextSec;
   const budget = Math.floor(base);
   return budget < args.backendMinSec ? null : budget;
 }

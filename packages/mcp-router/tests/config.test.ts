@@ -46,6 +46,16 @@ describe("loadConfig", () => {
     expect(loaded.path).toBeUndefined();
   });
 
+  it("accepts an advisory opencode entry with no model (finding #2)", async () => {
+    const configPath = writeConfig(dir, minimalTiers({ backend: "opencode", advisory: true }), 0o600);
+    const loaded = await loadConfig({ configPath });
+    expect(loaded.source).toBe("file");
+    const entry = loaded.config.tiers.standard[0];
+    expect(entry.advisory).toBe(true);
+    // No model to derive from → provider falls back to the backend name, not a throw.
+    expect(entry.provider).toBe("opencode");
+  });
+
   it("valid 0600 file loads and derives provider from model prefix", async () => {
     const configPath = writeConfig(
       dir,

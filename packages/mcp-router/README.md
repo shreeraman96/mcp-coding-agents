@@ -35,8 +35,9 @@ assume any model:
 
 - **opencode** — spawned; any provider/model your OpenCode install exposes.
 - **grok** — spawned; the Grok Build CLI.
-- **codex** — *advisory* in v1: a `codex` tier tells the caller to use the Codex
-  MCP directly (the router does not spawn it).
+- **codex** — spawned by default, or set `"advisory": true` on the entry to have
+  the router return a "use the Codex MCP directly" hint instead of spawning it
+  (an advisory entry needs no model and never sends your prompt anywhere).
 
 ## Configuration
 
@@ -78,16 +79,34 @@ the server refuses to read it.
   inside (default `$HOME/Projects`). This is the security boundary.
 - `MCP_ROUTER_CONFIG` — override the config path.
 
+### Validate your config: `mcp-router --check`
+
+Run the config doctor in your terminal (this is a CLI command, separate from the
+MCP stdio server) to confirm the server will accept your config before wiring it
+up:
+
+```bash
+mcp-router --check            # checks the default config path
+mcp-router --check <path>     # or an explicit path
+```
+
+It loads the config through the exact same hardened path the server uses
+(permissions `0600`, ownership, parent-directory checks, schema, and provider
+derivation), prints the configured tiers/capabilities and which backend CLIs are
+installed (warning on any configured-but-missing backend), and exits `0` when the
+config is valid, `1` when it is invalid or absent.
+
 ## Tools
 
 - **`route(prompt, cwd, tier, caps?, timeoutSec?)`** — dispatch to the tier (with
   safe fallback). Returns served-by, the full attempt trace, any cross-provider
   notice, then the assistant text (redacted).
-- **`list_tiers()`** — discovery: which tiers/capabilities are configured, which
+- **`list_tiers()`** — minimal discovery: which tiers/capabilities are configured
+  (presence only — never model ids, candidate counts, or the config path), which
   are cooling, and which CLIs are installed. Sends no prompt, probes no provider.
-- **`router_dry_run(cwd, tier, caps?, timeoutSec?)`** — preview the exact ordered
-  recipients, authorization decisions, cross-provider crossings, and budget split
-  **without** sending the prompt.
+- **`router_dry_run(cwd, tier, caps?, timeoutSec?)`** — the explicit recipient
+  preview: the exact ordered recipients (backend/model), authorization decisions,
+  cross-provider crossings, and budget split, **without** sending the prompt.
 
 ## Safety limitations
 

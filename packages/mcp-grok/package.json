@@ -1,6 +1,6 @@
 {
   "name": "mcp-grok",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "MCP server that delegates coding tasks to the installed Grok Build CLI.",
   "type": "module",
   "license": "MIT",
