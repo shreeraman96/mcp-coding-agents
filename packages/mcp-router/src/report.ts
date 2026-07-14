@@ -57,10 +57,11 @@ export function formatRouteResult(result: RouteResult): string {
   if (served) {
     // Advisory entries carry no backend-native model id by contract, so the
     // slot renders the literal "advisory" rather than a model path.
+    // `model` is the backend-native id (opencode's already carries the
+    // `provider/` prefix), so print it verbatim rather than re-prefixing the
+    // derived provider and doubling it (e.g. "fireworks-ai/fireworks-ai/...").
     const modelOrAdvisory = served.model ?? "advisory";
-    lines.push(
-      `served-by: ${served.name} (${served.backend} · ${served.provider}/${modelOrAdvisory})`,
-    );
+    lines.push(`served-by: ${served.name} (${served.backend} · ${modelOrAdvisory})`);
   } else {
     lines.push("served-by: (none)");
   }

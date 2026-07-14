@@ -185,9 +185,13 @@ server.registerTool(
       const loaded = await loadConfig().catch((err) => {
         throw new Error(`Config error: ${String((err as Error).message ?? err)}`);
       });
-      const { config, source, path: configPath } = loaded;
+      const { config, source } = loaded;
       const now = Date.now();
-      const lines: string[] = [`config source: ${source}${configPath ? ` (${configPath})` : ""}`];
+      // Report only whether the config came from a file vs auto-detect — NOT the
+      // absolute path, which would leak the server's home-directory/username
+      // layout to the untrusted caller. (`mcp-router --check` prints the path for
+      // the operator locally; this always-on discovery surface does not.)
+      const lines: string[] = [`config source: ${source}`];
 
       lines.push("", "tiers:");
       for (const tier of TIER_NAMES) {
@@ -210,19 +214,21 @@ server.registerTool(
 
       lines.push("", "capabilities:");
       for (const cap of CAPABILITIES) {
-        const entry = config.capabilities[cap];
-        lines.push(
-          entry
-            ? `  ${cap}: ${entry.backend} · ${entry.provider ?? "?"}/${entry.model ?? "?"}`
-            : `  ${cap}: (unconfigured)`,
-        );
+        // Presence only — same rationale as tiers above: the backend/provider/
+        // model identity is private config not exposed on this discovery surface.
+        // (router_dry_run is the explicit recipient-preview tool for that.)
+        lines.push(`  ${cap}: ${config.capabilities[cap] ? "configured" : "(unconfigured)"}`);
       }
 
       lines.push("", "installed backends:");
-      for (const name of Object.keys(SPAWNABLE) as SpawnableName[]) {
-        const det = await detectCached(name);
+      const backendNames = Object.keys(SPAWNABLE) as SpawnableName[];
+      // Probe backends concurrently: the detections are independent, so on a cold
+      // cache this is one spawn's latency instead of the sum of three.
+      const detections = await Promise.all(backendNames.map((name) => detectCached(name)));
+      backendNames.forEach((name, index) => {
+        const det = detections[index];
         lines.push(`  ${name}: ${det.installed ? `installed${det.version ? ` (${det.version})` : ""}` : "not found"}`);
-      }
+      });
 
       return toolSuccess(lines.join("\n"));
     } catch (err) {
@@ -287,7 +293,7 @@ server.registerTool(
       let remaining = input.timeoutSec;
       for (let i = 0; i < entries.length; i += 1) {
         const e = entries[i];
-        const target = e.advisory ? `${e.backend} (advisory)` : `${e.backend} · ${e.provider}/${e.model ?? "?"}`;
+        const target = e.advisory ? `${e.backend} (advisory)` : `${e.backend} · ${e.model ?? "?"}`;
         if (e.advisory) {
           lines.push(`  ${i + 1}. ${e.name}: ${target}  (advisory — terminal, no run)`);
           break;

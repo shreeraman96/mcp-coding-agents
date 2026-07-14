@@ -115,6 +115,7 @@ describe("Codex buildArgs / buildCodexArgs", () => {
       "--skip-git-repo-check",
       "-o",
       "/tmp/mcp-codex-123/last-message.txt",
+      "--",
       "hello world",
     ]);
   });
@@ -140,9 +141,18 @@ describe("Codex buildArgs / buildCodexArgs", () => {
       "/tmp/a.png",
       "-i",
       "/tmp/b.png",
+      "--",
       "hello world",
     ]);
     expect(args[args.length - 1]).toBe("hello world");
+  });
+
+  it("puts -- before a prompt starting with a dash so codex does not parse it as a flag", () => {
+    const args = buildArgs({ ...base, prompt: "--help me now" });
+    const sep = args.indexOf("--");
+    expect(sep).toBeGreaterThan(-1);
+    expect(args[sep + 1]).toBe("--help me now");
+    expect(args[args.length - 1]).toBe("--help me now");
   });
 
   it("buildCodexArgs is an alias of buildArgs", () => {
