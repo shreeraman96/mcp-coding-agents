@@ -16,9 +16,8 @@ import { createDeadline, attemptBudgetSec } from "./deadline.js";
 import { CooldownRegistry } from "./cooldown.js";
 import { computeFingerprint, settleFingerprint, fingerprintsEqual } from "./fingerprint.js";
 import { formatRouteResult } from "./report.js";
-import { OpencodeBackend } from "./backends/opencode.js";
-import { GrokBackend } from "./backends/grok.js";
-import { CodexBackend } from "./backends/codex.js";
+import { SPAWNABLE, type SpawnableName } from "./backends/registry.js";
+import { runCheck } from "./check.js";
 import { crossesProvider } from "./provider.js";
 import {
   TIER_NAMES,
@@ -35,16 +34,6 @@ import {
 // re-checked every time rather than cached stale.
 const cooldowns = new CooldownRegistry();
 const queue = new CwdQueue();
-
-// Spawnable backends live here. codex is spawnable (non-advisory entries route
-// to CodexBackend); an entry may still opt into `advisory: true` to keep the
-// router from spawning it and instead return a hint to use codex's own MCP.
-const SPAWNABLE = {
-  opencode: new OpencodeBackend(),
-  grok: new GrokBackend(),
-  codex: new CodexBackend(),
-} as const;
-type SpawnableName = keyof typeof SPAWNABLE;
 
 function getBackend(name: BackendName): Backend {
   const backend = (SPAWNABLE as Record<string, Backend | undefined>)[name];
@@ -352,9 +341,26 @@ if (process.argv[1] !== undefined) {
   }
 }
 if (isMainModule) {
-  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+  const argv = process.argv.slice(2);
+  if (argv.includes("--help") || argv.includes("-h")) {
     console.log("mcp-router: MCP stdio server routing coding tasks across configured model tiers");
-    console.log("Usage: mcp-router");
+    console.log("");
+    console.log("Usage:");
+    console.log("  mcp-router            start the MCP stdio server (spawned by your MCP client)");
+    console.log("  mcp-router --check [path]   validate the config and report whether the server will accept it");
+    console.log("  mcp-router --help     show this help");
+  } else if (argv.includes("--check")) {
+    // Config doctor: validate via the real loader and exit 0 (valid) / 1 (invalid
+    // or absent). An optional bare path after --check overrides the config location.
+    const idx = argv.indexOf("--check");
+    const next = argv[idx + 1];
+    const configPath = next !== undefined && !next.startsWith("-") ? next : undefined;
+    runCheck({ configPath, detect: (name) => detectCached(name) })
+      .then((code) => process.exit(code))
+      .catch((err) => {
+        console.error("check failed:", String((err as Error).message ?? err));
+        process.exit(1);
+      });
   } else {
     main().catch((err) => {
       console.error("Fatal error starting mcp-router:", err);
