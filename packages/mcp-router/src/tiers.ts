@@ -145,6 +145,9 @@ export function resolveEntries(args: {
     provider: c.entry.provider ?? "",
     model: c.entry.model,
     advisory: c.entry.advisory === true,
+    permissionMode: c.entry.permissionMode,
+    allowedTools: c.entry.allowedTools,
+    sandbox: c.entry.sandbox,
   }));
 
   return { entries, notes };

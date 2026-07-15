@@ -22,6 +22,7 @@ const AGGREGATOR_PREFIXES = new Set<string>(["openrouter", "github-copilot"]);
 export function deriveProvider(backend: BackendName, model: string | undefined): string {
   if (backend === "grok") return "xai";
   if (backend === "codex") return "openai";
+  if (backend === "claude") return "anthropic";
   if (!model || model.indexOf("/") <= 0) {
     throw new Error(`opencode model must look like "provider/model": got ${model ?? "(none)"}`);
   }

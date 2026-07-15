@@ -207,6 +207,131 @@ describe("loadConfig", () => {
     });
   });
 
+  it("a claude entry validates and derives provider 'anthropic'", async () => {
+    const configPath = writeConfig(dir, minimalTiers({ backend: "claude", model: "opus" }), 0o600);
+    const loaded = await loadConfig({ configPath });
+    expect(loaded.config.tiers.standard[0]).toMatchObject({
+      backend: "claude",
+      model: "opus",
+      provider: "anthropic",
+    });
+  });
+
+  it("a claude entry with a declared provider:'openai' is rejected (mislabel)", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "claude", model: "opus", provider: "openai" }),
+      0o600,
+    );
+    await expect(loadConfig({ configPath })).rejects.toThrow(/provider/i);
+  });
+
+  it("permissionMode on a non-claude (opencode) entry is rejected", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "opencode", model: "prov/model-a", permissionMode: "acceptEdits" }),
+      0o600,
+    );
+    await expect(loadConfig({ configPath })).rejects.toThrow(/permissionMode is only valid for the 'claude' backend/);
+  });
+
+  it("permissionMode:'bypassPermissions' on a claude entry is accepted", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "claude", model: "opus", permissionMode: "bypassPermissions" }),
+      0o600,
+    );
+    const loaded = await loadConfig({ configPath });
+    expect(loaded.config.tiers.standard[0]).toMatchObject({ permissionMode: "bypassPermissions" });
+  });
+
+  it("permissionMode:'plan' is rejected by the zod enum", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "claude", model: "opus", permissionMode: "plan" }),
+      0o600,
+    );
+    await expect(loadConfig({ configPath })).rejects.toThrow();
+  });
+
+  it("permissionMode:'default' is rejected by the zod enum", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "claude", model: "opus", permissionMode: "default" }),
+      0o600,
+    );
+    await expect(loadConfig({ configPath })).rejects.toThrow();
+  });
+
+  it("allowedTools on a non-claude (opencode) entry is rejected", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "opencode", model: "prov/model-a", allowedTools: ["WebFetch"] }),
+      0o600,
+    );
+    await expect(loadConfig({ configPath })).rejects.toThrow(/allowedTools is only valid for the 'claude' backend/);
+  });
+
+  it("allowedTools on a claude entry is accepted", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "claude", model: "opus", allowedTools: ["WebFetch", "Read(./docs/**)"] }),
+      0o600,
+    );
+    const loaded = await loadConfig({ configPath });
+    expect(loaded.config.tiers.standard[0]).toMatchObject({ allowedTools: ["WebFetch", "Read(./docs/**)"] });
+  });
+
+  it("allowedTools with a bad rule (newline) is rejected by the zod regex", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "claude", model: "opus", allowedTools: ["Bash(echo\nhi)"] }),
+      0o600,
+    );
+    await expect(loadConfig({ configPath })).rejects.toThrow();
+  });
+
+  it("allowedTools with more than 32 rules is rejected by the zod cap", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({
+        backend: "claude",
+        model: "opus",
+        allowedTools: Array.from({ length: 33 }, (_, i) => `Tool${i}`),
+      }),
+      0o600,
+    );
+    await expect(loadConfig({ configPath })).rejects.toThrow();
+  });
+
+  it("sandbox on a non-codex (opencode) entry is rejected", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "opencode", model: "prov/model-a", sandbox: "read-only" }),
+      0o600,
+    );
+    await expect(loadConfig({ configPath })).rejects.toThrow(/sandbox is only valid for the 'codex' backend/);
+  });
+
+  it("sandbox:'danger-full-access' on a codex entry is accepted", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "codex", model: "gpt-5", sandbox: "danger-full-access" }),
+      0o600,
+    );
+    const loaded = await loadConfig({ configPath });
+    expect(loaded.config.tiers.standard[0]).toMatchObject({ sandbox: "danger-full-access" });
+  });
+
+  it("sandbox:'locked-down' is rejected by the zod enum", async () => {
+    const configPath = writeConfig(
+      dir,
+      minimalTiers({ backend: "codex", model: "gpt-5", sandbox: "locked-down" }),
+      0o600,
+    );
+    await expect(loadConfig({ configPath })).rejects.toThrow();
+  });
+
   it(`tier list longer than MAX_TIER_ENTRIES (${MAX_TIER_ENTRIES}) rejects`, async () => {
     const entries = Array.from({ length: MAX_TIER_ENTRIES + 1 }, (_, i) => ({
       backend: "opencode" as const,

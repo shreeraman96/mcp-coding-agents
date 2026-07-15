@@ -193,6 +193,58 @@ describe("computeRisks", () => {
     expect(computeRisks(next, next).some((r) => r.code === "cross-tier-fallback")).toBe(false);
   });
 
+  it("claude-bypass-permissions fires for a claude entry with permissionMode bypassPermissions", () => {
+    const next = config({
+      tiers: {
+        heavy: [entry({ backend: "claude", model: "opus", provider: "anthropic", permissionMode: "bypassPermissions" })],
+      },
+    });
+    const risk = next && computeRisks(null, next).find((r) => r.code === "claude-bypass-permissions" && r.tier === "heavy");
+    expect(risk).toBeDefined();
+  });
+
+  it("claude-bypass-permissions does NOT fire for permissionMode acceptEdits", () => {
+    const next = config({
+      tiers: {
+        heavy: [entry({ backend: "claude", model: "opus", provider: "anthropic", permissionMode: "acceptEdits" })],
+      },
+    });
+    expect(computeRisks(null, next).some((r) => r.code === "claude-bypass-permissions")).toBe(false);
+  });
+
+  it("claude-bypass-permissions does NOT fire when permissionMode is omitted (defaults to acceptEdits)", () => {
+    const next = config({
+      tiers: {
+        heavy: [entry({ backend: "claude", model: "opus", provider: "anthropic" })],
+      },
+    });
+    expect(computeRisks(null, next).some((r) => r.code === "claude-bypass-permissions")).toBe(false);
+  });
+
+  it("claude-bypass-permissions fires for a capability slot too", () => {
+    const next = config({
+      capabilities: {
+        vision: entry({
+          backend: "claude",
+          model: "opus",
+          provider: "anthropic",
+          permissionMode: "bypassPermissions",
+          capabilities: ["vision"],
+        }),
+      },
+    });
+    expect(computeRisks(null, next).some((r) => r.code === "claude-bypass-permissions" && r.tier === undefined)).toBe(
+      true,
+    );
+  });
+
+  it("anthropic is not treated as an aggregator provider (no aggregator-primary risk for claude)", () => {
+    const next = config({
+      tiers: { standard: [entry({ backend: "claude", model: "opus", provider: "anthropic" })] },
+    });
+    expect(computeRisks(null, next).some((r) => r.code === "aggregator-primary")).toBe(false);
+  });
+
   it("cross-tier-fallback does NOT fire when source and target tiers share a provider", () => {
     const next = config({
       tiers: {
@@ -203,5 +255,75 @@ describe("computeRisks", () => {
       allowCrossProviderFallback: true,
     });
     expect(computeRisks(next, next).some((r) => r.code === "cross-tier-fallback")).toBe(false);
+  });
+
+  it("claude-allowed-bash fires for a claude entry with a Bash rule in allowedTools", () => {
+    const next = config({
+      tiers: {
+        heavy: [
+          entry({
+            backend: "claude",
+            model: "opus",
+            provider: "anthropic",
+            allowedTools: ["Bash(npm test:*)"],
+          }),
+        ],
+      },
+    });
+    const risk = computeRisks(null, next).find((r) => r.code === "claude-allowed-bash" && r.tier === "heavy");
+    expect(risk).toBeDefined();
+    expect(computeRisks(null, next).some((r) => r.code === "claude-allowed-tools")).toBe(false);
+  });
+
+  it("claude-allowed-tools note fires for non-Bash allowedTools, NOT the bash risk", () => {
+    const next = config({
+      tiers: {
+        heavy: [entry({ backend: "claude", model: "opus", provider: "anthropic", allowedTools: ["WebFetch"] })],
+      },
+    });
+    const risks = computeRisks(null, next);
+    expect(risks.some((r) => r.code === "claude-allowed-tools" && r.tier === "heavy")).toBe(true);
+    expect(risks.some((r) => r.code === "claude-allowed-bash")).toBe(false);
+  });
+
+  it("neither claude-allowed-* risk fires when allowedTools is omitted", () => {
+    const next = config({
+      tiers: {
+        heavy: [entry({ backend: "claude", model: "opus", provider: "anthropic" })],
+      },
+    });
+    const risks = computeRisks(null, next);
+    expect(risks.some((r) => r.code === "claude-allowed-bash" || r.code === "claude-allowed-tools")).toBe(false);
+  });
+
+  it("codex-full-access fires for a codex entry with sandbox danger-full-access", () => {
+    const next = config({
+      tiers: {
+        heavy: [entry({ backend: "codex", model: "gpt-5", provider: "openai", sandbox: "danger-full-access" })],
+      },
+    });
+    const risk = computeRisks(null, next).find((r) => r.code === "codex-full-access" && r.tier === "heavy");
+    expect(risk).toBeDefined();
+  });
+
+  it("codex-read-only fires for a codex entry with sandbox read-only", () => {
+    const next = config({
+      tiers: {
+        heavy: [entry({ backend: "codex", model: "gpt-5", provider: "openai", sandbox: "read-only" })],
+      },
+    });
+    const risk = computeRisks(null, next).find((r) => r.code === "codex-read-only" && r.tier === "heavy");
+    expect(risk).toBeDefined();
+  });
+
+  it("neither codex sandbox risk fires for workspace-write or omitted sandbox", () => {
+    const next = config({
+      tiers: {
+        heavy: [entry({ backend: "codex", model: "gpt-5", provider: "openai", sandbox: "workspace-write" })],
+        standard: [entry({ backend: "codex", model: "gpt-5", provider: "openai" })],
+      },
+    });
+    const risks = computeRisks(null, next);
+    expect(risks.some((r) => r.code === "codex-full-access" || r.code === "codex-read-only")).toBe(false);
   });
 });
