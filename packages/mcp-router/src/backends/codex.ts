@@ -11,6 +11,7 @@ const execFile = promisify(execFileCallback);
 
 export class CodexBackend implements Backend {
   readonly name = "codex" as const;
+  readonly containment = "os" as const;
 
   // Provider is fixed for codex; deriveProvider centralizes the rule.
   provider(_entry: Entry): string {
@@ -38,6 +39,7 @@ export class CodexBackend implements Backend {
       timeoutSec: req.timeoutSec,
       signal: req.signal,
       onHeartbeat: req.onHeartbeat,
+      sandbox: req.sandbox,
     });
     // codex capacity/auth signals are provenance:"inferred" (free-text); the
     // router's fingerprint gate — not this classification — is what makes any

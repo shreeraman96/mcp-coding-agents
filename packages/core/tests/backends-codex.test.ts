@@ -20,6 +20,8 @@ import {
   STDERR_RING_CAP,
   MIN_TIMEOUT_SEC,
   MAX_TIMEOUT_SEC,
+  SANDBOX_MODES,
+  DEFAULT_SANDBOX,
 } from "../src/backends/codex.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -171,6 +173,30 @@ describe("Codex buildArgs / buildCodexArgs", () => {
     expect(MODEL_RE.test("gpt-5.1")).toBe(true);
     expect(MODEL_RE.test("-bad")).toBe(false);
     expect(MODEL_RE.test("")).toBe(false);
+  });
+
+  it("defaults sandbox to workspace-write when unset", () => {
+    const args = buildArgs(base);
+    expect(args.slice(2, 4)).toEqual(["--sandbox", "workspace-write"]);
+    expect(DEFAULT_SANDBOX).toBe("workspace-write");
+  });
+
+  it("passes through an explicit read-only sandbox", () => {
+    const args = buildArgs({ ...base, sandbox: "read-only" });
+    expect(args.slice(2, 4)).toEqual(["--sandbox", "read-only"]);
+  });
+
+  it("passes through an explicit danger-full-access sandbox", () => {
+    const args = buildArgs({ ...base, sandbox: "danger-full-access" });
+    expect(args.slice(2, 4)).toEqual(["--sandbox", "danger-full-access"]);
+  });
+
+  it("throws RangeError for an invalid sandbox", () => {
+    expect(() => buildArgs({ ...base, sandbox: "locked-down" as any })).toThrow(RangeError);
+  });
+
+  it("SANDBOX_MODES is locked to read-only / workspace-write / danger-full-access", () => {
+    expect(SANDBOX_MODES).toEqual(["read-only", "workspace-write", "danger-full-access"]);
   });
 });
 

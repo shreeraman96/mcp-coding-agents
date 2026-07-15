@@ -50,6 +50,8 @@ const INSTALL_HINTS: Partial<Record<SpawnableName, { npmPackage?: string; hint: 
   codex: { npmPackage: "@openai/codex", hint: "npm install -g @openai/codex  (https://github.com/openai/codex)" },
   // No confirmed npm-global package for the Grok Build CLI — guidance only.
   grok: { hint: "see the Grok Build CLI install docs; mcp-orchestrate does not know a safe auto-install command for it" },
+  // High confidence: Anthropic publishes the Claude Code CLI to npm as @anthropic-ai/claude-code.
+  claude: { npmPackage: "@anthropic-ai/claude-code", hint: "npm install -g @anthropic-ai/claude-code  (https://docs.claude.com/claude-code)" },
 };
 
 async function defaultNpmInstall(pkg: string): Promise<{ ok: boolean; message: string }> {
@@ -171,6 +173,11 @@ async function buildEntry(
   if (!backend) return undefined;
   if (backend in SPAWNABLE && !installed.get(backend as SpawnableName)?.installed) {
     await offerInstall(io, deps, backend as SpawnableName);
+  }
+  if (backend === "claude") {
+    // Guidance only — never auto-run `claude login` (it's an interactive
+    // subscription-auth flow the wizard must not drive on the user's behalf).
+    io.print("  Run `claude login` once to authenticate with your Claude subscription (no API key needed).");
   }
   const advisory = backend === "codex" ? await askYesNo(io, "  mark this codex entry advisory (never spawned; returns a hint)?", true) : false;
   if (advisory) return { backend, advisory: true };

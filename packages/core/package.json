@@ -42,6 +42,10 @@
     "./backends/codex.js": {
       "types": "./dist/backends/codex.d.ts",
       "default": "./dist/backends/codex.js"
+    },
+    "./backends/claude.js": {
+      "types": "./dist/backends/claude.d.ts",
+      "default": "./dist/backends/claude.js"
     }
   },
   "scripts": {

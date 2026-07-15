@@ -128,5 +128,92 @@ export function computeRisks(current: RouterConfig | null, next: RouterConfig): 
     }
   }
 
+  // claude bypassPermissions: no sandbox + full host access (arbitrary shell +
+  // filesystem). Flag every configured slot (tier primary/fallback candidates
+  // and capability slots) that resolves to it; `acceptEdits` (the safe
+  // default) never fires this.
+  const evalClaudeBypass = (entry: Entry | undefined, tier: TierName | undefined, label: string): void => {
+    if (!entry || entry.backend !== "claude") return;
+    const mode = entry.permissionMode ?? "acceptEdits";
+    if (mode !== "bypassPermissions") return;
+    risks.push({
+      code: "claude-bypass-permissions",
+      tier,
+      message: `${label} routes to claude with permissionMode 'bypassPermissions': Claude runs with NO sandbox and full host access (arbitrary shell + filesystem). An untrusted prompt can act as you.`,
+    });
+  };
+
+  for (const tier of TIER_NAMES) {
+    for (const entry of next.tiers[tier]) {
+      evalClaudeBypass(entry, tier, `tier '${tier}'`);
+    }
+  }
+  for (const cap of CAPABILITIES as readonly Capability[]) {
+    evalClaudeBypass(next.capabilities[cap], undefined, `capability '${cap}'`);
+  }
+
+  // claude allowedTools: a Bash allow-rule is escapable via command chaining
+  // (an untrusted prompt can append arbitrary commands), so it grants
+  // effectively full shell with NO sandbox -- treat it like bypassPermissions.
+  // A non-Bash rule is genuinely scoped -- only a mild informational note.
+  const BASH_RULE_RE = /^Bash(\(|$)/i;
+  const evalClaudeAllowedTools = (entry: Entry | undefined, tier: TierName | undefined, label: string): void => {
+    if (!entry || entry.backend !== "claude") return;
+    const allowedTools = entry.allowedTools ?? [];
+    if (allowedTools.length === 0) return;
+    if (allowedTools.some((rule) => BASH_RULE_RE.test(rule))) {
+      risks.push({
+        code: "claude-allowed-bash",
+        tier,
+        message: `${label} pre-approves a Bash rule via allowedTools: Bash allow-rules are escapable by command chaining (an untrusted prompt can append arbitrary commands), so this grants effectively full shell access with NO sandbox -- treat it like bypassPermissions.`,
+      });
+    } else {
+      risks.push({
+        code: "claude-allowed-tools",
+        tier,
+        message: `${label} pre-approves tools [${allowedTools.join(", ")}] without prompting (non-shell; genuinely scoped).`,
+      });
+    }
+  };
+
+  for (const tier of TIER_NAMES) {
+    for (const entry of next.tiers[tier]) {
+      evalClaudeAllowedTools(entry, tier, `tier '${tier}'`);
+    }
+  }
+  for (const cap of CAPABILITIES as readonly Capability[]) {
+    evalClaudeAllowedTools(next.capabilities[cap], undefined, `capability '${cap}'`);
+  }
+
+  // codex sandbox: "danger-full-access" removes the OS sandbox entirely
+  // (arbitrary writes + network) -- an untrusted prompt can act as you.
+  // "read-only" is a mild note (it cannot edit files, so write tasks fail).
+  // "workspace-write"/unset is the safe default -- no risk.
+  const evalCodexSandbox = (entry: Entry | undefined, tier: TierName | undefined, label: string): void => {
+    if (!entry || entry.backend !== "codex") return;
+    if (entry.sandbox === "danger-full-access") {
+      risks.push({
+        code: "codex-full-access",
+        tier,
+        message: `${label} routes to codex with sandbox 'danger-full-access': NO OS sandbox -- arbitrary writes + network. An untrusted prompt can act as you.`,
+      });
+    } else if (entry.sandbox === "read-only") {
+      risks.push({
+        code: "codex-read-only",
+        tier,
+        message: `${label} routes to codex sandbox 'read-only': it cannot edit files, so write tasks will fail.`,
+      });
+    }
+  };
+
+  for (const tier of TIER_NAMES) {
+    for (const entry of next.tiers[tier]) {
+      evalCodexSandbox(entry, tier, `tier '${tier}'`);
+    }
+  }
+  for (const cap of CAPABILITIES as readonly Capability[]) {
+    evalCodexSandbox(next.capabilities[cap], undefined, `capability '${cap}'`);
+  }
+
   return risks;
 }

@@ -4,8 +4,8 @@ Send every coding task to the right-priced model automatically — cheap models 
 the grunt work, your heavy hitter for the hard problems — and never lose work to a
 failed backend. `mcp-orchestrate` is one MCP server that maps three tiers
 (`light` / `standard` / `heavy`) onto the coding CLIs you already run — opencode,
-grok, and codex — with capability filtering, cooldowns, and a fallback that only
-retries on a **fast, clean failure with a byte-identical git tree**.
+grok, codex, and claude — with capability filtering, cooldowns, and a fallback that
+only retries on a **fast, clean failure with a byte-identical git tree**.
 
 Works with **any MCP client** — Claude Code, Codex, Cursor, opencode, or your own.
 The calling assistant routes by *intent* (it picks a tier with full task context);
@@ -20,15 +20,15 @@ mcp-orchestrate --init      # guided setup
 ## It spawns CLIs, not MCPs
 
 ```
-  your MCP client ──calls──▶ mcp-orchestrate ──spawns──▶ opencode / grok / codex   (CLI binaries)
+  your MCP client ──calls──▶ mcp-orchestrate ──spawns──▶ opencode / grok / codex / claude   (CLI binaries)
 
   mcp-opencode, mcp-grok ── siblings: separate MCP servers over the same CLIs
                             (the router never calls them)
 ```
 
 The router is *only* an MCP server — it has no MCP client inside it, so it never
-calls `mcp-opencode`, `mcp-grok`, or the codex MCP. Whether those are installed has
-no effect on routing. Prefer plain single-backend MCPs with no routing at all?
+calls `mcp-opencode`, `mcp-grok`, or the codex/claude MCPs. Whether those are
+installed has no effect on routing. Prefer plain single-backend MCPs with no routing at all?
 Install them directly (`npx -y mcp-opencode`, `npx -y mcp-grok`) and let your
 assistant call whichever it needs — they're siblings over the same CLIs, not layers
 beneath the router.
@@ -43,8 +43,8 @@ install that backend's own MCP instead.
 ## Requirements
 
 The router spawns the backend CLIs you enable, so each must be **installed and
-authenticated**: `opencode`, `grok`, and/or `codex` (whichever your tiers use),
-plus Node.js >= 20.
+authenticated**: `opencode`, `grok`, `codex`, and/or `claude` (whichever your
+tiers use), plus Node.js >= 20.
 
 ## Install
 
@@ -63,18 +63,45 @@ codex  mcp add orchestrate -- npx -y mcp-orchestrate    # Codex
 
 ## Backends vs. models
 
-A *backend* is the CLI program that runs the task (`opencode` / `grok` / `codex`);
-a *model* is the AI it runs (e.g. `grok-4.5`, `glm-5p2`, `gpt-5.6-terra`). One
-backend can front many models — which ones you can route to depends on how *you've*
-configured that CLI. The router never adds models; it routes to whatever your
-installed CLIs already expose. There is no separate `claude` backend — reach Claude
-models through a backend that serves them. Per backend:
+A *backend* is the CLI program that runs the task (`opencode` / `grok` / `codex` /
+`claude`); a *model* is the AI it runs (e.g. `grok-4.5`, `glm-5p2`, `gpt-5.6-terra`,
+`opus`). One backend can front many models — which ones you can route to depends on
+how *you've* configured that CLI. The router never adds models; it routes to
+whatever your installed CLIs already expose. Per backend:
 
 - **opencode** — spawned; any provider/model your OpenCode install exposes.
 - **grok** — spawned; the Grok Build CLI (always provider `xai`).
 - **codex** — spawned by default, or set `"advisory": true` on the entry to have
   the router return a "use the Codex MCP directly" hint instead of spawning it
-  (an advisory entry needs no model and never sends your prompt anywhere).
+  (an advisory entry needs no model and never sends your prompt anywhere). Per-entry
+  `sandbox`: `"read-only"` | `"workspace-write"` (default) | `"danger-full-access"`.
+  `"danger-full-access"` removes the OS sandbox entirely (risk-flagged by `--init`);
+  `"read-only"` can't write files.
+- **claude** — spawned; runs Claude Code headless (`claude -p`) on your **Claude
+  subscription** (no API key needed); provider `anthropic`; model is `opus` /
+  `sonnet` / `haiku` or a full concrete id.
+
+### Claude backend: safety & scope
+
+- **No OS sandbox** — unlike codex's `--sandbox workspace-write`, `claude` runs at
+  the same unsandboxed posture as `grok`/`opencode` today (`containment: "none"`).
+  OS-level sandboxing (`sandbox-exec`/`bwrap`) is deferred future work.
+- Default `permissionMode: "acceptEdits"` lets it edit files but Bash is denied in
+  headless mode — set `"permissionMode": "bypassPermissions"` per entry for full
+  autonomy (`--init` flags this as a risk: it means **no sandbox + full host
+  access**, so an untrusted prompt can act as you).
+- `allowedTools` (claude-only) is a pass-through to claude's `--allowedTools`,
+  pre-approving scoped tools without prompting and without a full bypass, e.g.
+  `"allowedTools": ["WebFetch", "Read(./docs/**)"]`. **`Bash(...)` allow-rules are
+  NOT a sandbox** — they're escapable via command chaining (an untrusted prompt can
+  append arbitrary commands), so a Bash rule grants effectively full shell to an
+  untrusted prompt, the same risk as `bypassPermissions`; `--init` flags it the
+  same way. Non-shell rules are genuinely scoped.
+- The router isolates the spawned `claude` from your own MCP servers, hooks, and
+  `CLAUDE.md` on every spawn (`--strict-mcp-config` with an empty `--mcp-config`,
+  plus `--setting-sources ''`).
+- This is subscription use of `claude -p` via Anthropic's official CLI — confirm
+  it fits your plan's terms before enabling it.
 
 > **Honest scope (v1 fallback).** Fallback fires only for **fast, clean failures**
 > — a backend that isn't installed, is rate-limited/overloaded immediately, or
@@ -93,7 +120,7 @@ the server refuses to read it.
   "tiers": {
     "light":    null,
     "standard": { "backend": "opencode", "model": "<provider>/<model>" },
-    "heavy":    { "backend": "codex", "advisory": true }
+    "heavy":    { "backend": "claude", "model": "opus", "permissionMode": "acceptEdits" }
   },
   "capabilities": {
     "vision": { "backend": "opencode", "model": "<provider>/<vision-model>", "capabilities": ["vision"] }
@@ -108,7 +135,14 @@ the server refuses to read it.
   model fills each slot. A tier name denotes *your intent for the slot*, not a
   model's size.
 - **Provider is derived** from the opencode model prefix (`<provider>/...`) and a
-  declared `provider` that disagrees is rejected. grok is always `xai`.
+  declared `provider` that disagrees is rejected. grok is always `xai`, codex is
+  always `openai`, claude is always `anthropic`.
+- **`permissionMode`** is claude-only (`"acceptEdits"` default or
+  `"bypassPermissions"`); declaring it on any other backend is rejected.
+- **`allowedTools`** is claude-only (a string array, e.g. `["WebFetch",
+  "Read(./docs/**)"]`); declaring it on any other backend is rejected.
+- **`sandbox`** is codex-only (`"read-only"` | `"workspace-write"` default |
+  `"danger-full-access"`); declaring it on any other backend is rejected.
 - **`allowCrossProviderFallback`** (default `false`): a fallback that would ship
   your prompt + repo content to a *different* provider requires this opt-in.
   Aggregator prefixes (`openrouter`, `github-copilot`) are always treated as

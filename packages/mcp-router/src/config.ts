@@ -26,6 +26,12 @@ const entrySchema = z
     model: z.string().optional(),
     advisory: z.boolean().optional(),
     capabilities: z.array(z.enum(CAPABILITIES as [Capability, ...Capability[]])).optional(),
+    permissionMode: z.enum(["acceptEdits", "bypassPermissions"]).optional(),
+    allowedTools: z
+      .array(z.string().min(1).max(200).regex(/^[A-Za-z_][A-Za-z0-9_-]*(\([^)\n\r]*\))?$/))
+      .max(32)
+      .optional(),
+    sandbox: z.enum(["read-only", "workspace-write", "danger-full-access"]).optional(),
   })
   .strict();
 
@@ -117,11 +123,21 @@ function authorize(config: RouterConfig): RouterConfig {
     ),
   ];
   for (const entry of entries) {
+    if (entry.permissionMode !== undefined && entry.backend !== "claude") {
+      throw new Error("permissionMode is only valid for the 'claude' backend");
+    }
+    if (entry.allowedTools !== undefined && entry.backend !== "claude") {
+      throw new Error("allowedTools is only valid for the 'claude' backend");
+    }
+    if (entry.sandbox !== undefined && entry.backend !== "codex") {
+      throw new Error("sandbox is only valid for the 'codex' backend");
+    }
     // deriveProvider needs a model only for opencode (provider = model prefix);
-    // grok/codex derive a fixed provider without one. An advisory entry may omit
-    // the model, so deriving for an advisory opencode entry would wrongly reject
-    // a legitimate config. Derive whenever we can; otherwise fall back to the
-    // backend name so advisory entries still carry a provider for reporting.
+    // grok/codex/claude derive a fixed provider without one. An advisory entry
+    // may omit the model, so deriving for an advisory opencode entry would
+    // wrongly reject a legitimate config. Derive whenever we can; otherwise
+    // fall back to the backend name so advisory entries still carry a
+    // provider for reporting.
     if (entry.model !== undefined || entry.backend !== "opencode") {
       const derived = deriveProvider(entry.backend, entry.model);
       if (entry.provider !== undefined && entry.provider !== derived) {

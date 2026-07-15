@@ -36,6 +36,13 @@ export const MAX_TIMEOUT_SEC = 3600;
 /** Codex model IDs are simple OpenAI names (e.g. "gpt-5", "o4-mini"). */
 export const MODEL_RE = /^[A-Za-z0-9](?:[A-Za-z0-9._:+@/-]*[A-Za-z0-9])?$/;
 
+/** Codex's `--sandbox` OS-level containment. `danger-full-access` removes the
+ * OS sandbox entirely (arbitrary writes + network); `read-only` cannot write
+ * at all. `workspace-write` is the safe default. */
+export const SANDBOX_MODES = ["read-only", "workspace-write", "danger-full-access"] as const;
+export type CodexSandbox = (typeof SANDBOX_MODES)[number];
+export const DEFAULT_SANDBOX: CodexSandbox = "workspace-write";
+
 /**
  * Redact credentials and sensitive local paths before returning diagnostics.
  * The secret-shaped patterns cover the generic credential forms any CLI passes
@@ -343,6 +350,7 @@ export interface BuildArgsOptions {
   lastMessageFile: string;
   prompt: string;
   images?: string[];
+  sandbox?: CodexSandbox;
 }
 
 export interface RunCodexOptions {
@@ -353,6 +361,8 @@ export interface RunCodexOptions {
   signal?: AbortSignal;
   onHeartbeat?: (elapsedSec: number, progress: number) => void;
   images?: string[];
+  /** OS sandbox level; defaults to "workspace-write" when unset. */
+  sandbox?: CodexSandbox;
   _spawnOverride?: { command: string; args?: string[]; prefixArgs?: string[] };
   _timeoutMsOverride?: number;
   _forceFinalizeMsOverride?: number;
@@ -375,13 +385,16 @@ function validateBuildArgs(opts: BuildArgsOptions): void {
   if (!MODEL_RE.test(opts.model)) {
     throw new RangeError(`invalid Codex model: ${opts.model}`);
   }
+  if (opts.sandbox !== undefined && !(SANDBOX_MODES as readonly string[]).includes(opts.sandbox)) {
+    throw new RangeError(`invalid Codex sandbox: ${opts.sandbox}`);
+  }
 }
 
 /**
- * Build the argv for `codex exec --json --sandbox workspace-write -C <cwd>
+ * Build the argv for `codex exec --json --sandbox <mode> -C <cwd>
  * -m <model> --skip-git-repo-check -o <lastMessageFile> <prompt>`, with an
  * optional `-i <file>` per attached image. The prompt is the trailing
- * positional argument.
+ * positional argument. `<mode>` defaults to "workspace-write" when unset.
  */
 export function buildArgs(opts: BuildArgsOptions): string[] {
   validateBuildArgs(opts);
@@ -390,7 +403,7 @@ export function buildArgs(opts: BuildArgsOptions): string[] {
     "exec",
     "--json",
     "--sandbox",
-    "workspace-write",
+    opts.sandbox ?? DEFAULT_SANDBOX,
     "-C",
     opts.cwd,
     "-m",
@@ -471,6 +484,7 @@ export async function runCodex(opts: RunCodexOptions): Promise<RunCodexOutcome> 
       lastMessageFile: resources.lastMessageFile,
       prompt: opts.prompt,
       images: opts.images,
+      sandbox: opts.sandbox,
     });
   } catch (err) {
     await cleanupResources(resources);

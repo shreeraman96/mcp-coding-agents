@@ -25,8 +25,8 @@ export const CAPABILITIES: readonly Capability[] = ["vision"] as const;
 
 /** Supported backend integrations. Extensible product feature, not a
  * user-specific assumption. `codex` is advisory-only in v1 (its own MCP). */
-export type BackendName = "opencode" | "grok" | "codex";
-export const BACKEND_NAMES: readonly BackendName[] = ["opencode", "grok", "codex"] as const;
+export type BackendName = "opencode" | "grok" | "codex" | "claude";
+export const BACKEND_NAMES: readonly BackendName[] = ["opencode", "grok", "codex", "claude"] as const;
 
 /**
  * One authorized (backend, provider, model) mapping the user places into a tier
@@ -44,6 +44,20 @@ export interface Entry {
   advisory?: boolean;
   /** Declared capabilities for this entry (e.g. ["vision"]). */
   capabilities?: Capability[];
+  /** claude-only: headless permission handling for `claude -p`. Default
+   * "acceptEdits" (file Write/Edit allowed, Bash denied headless).
+   * "bypassPermissions" allows everything with NO sandbox -- full host access. */
+  permissionMode?: "acceptEdits" | "bypassPermissions";
+  /** claude-only: pass-through to `--allowedTools <rule> ...`, pre-approving
+   * scoped tools headless (e.g. ["WebFetch", "Read(./docs/**)"]). A
+   * `Bash(...)` rule is escapable via command chaining and is NOT a sandbox
+   * boundary -- it grants effectively full shell to an untrusted prompt, the
+   * same risk class as permissionMode "bypassPermissions". */
+  allowedTools?: string[];
+  /** codex-only: OS sandbox level for `codex exec --sandbox <mode>`. Default
+   * "workspace-write". "danger-full-access" removes the OS sandbox entirely
+   * (arbitrary writes + network); "read-only" cannot write at all. */
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
 }
 
 export interface RouterConfig {
@@ -75,6 +89,12 @@ export interface ResolvedEntry {
   provider: string;
   model?: string;
   advisory: boolean;
+  /** claude-only; see Entry.permissionMode. */
+  permissionMode?: "acceptEdits" | "bypassPermissions";
+  /** claude-only; see Entry.allowedTools. */
+  allowedTools?: string[];
+  /** codex-only; see Entry.sandbox. */
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
 }
 
 /** Backend-agnostic result of ONE attempt, normalized from core's RunOutcome.
@@ -98,6 +118,12 @@ export interface RunRequest {
   timeoutSec: number;
   signal: AbortSignal;
   onHeartbeat?: (elapsedSec: number, progress: number) => void;
+  /** claude-only; see Entry.permissionMode. */
+  permissionMode?: "acceptEdits" | "bypassPermissions";
+  /** claude-only; see Entry.allowedTools. */
+  allowedTools?: string[];
+  /** codex-only; see Entry.sandbox. */
+  sandbox?: "read-only" | "workspace-write" | "danger-full-access";
 }
 
 export interface DetectResult {
@@ -109,6 +135,10 @@ export interface DetectResult {
  * classifiers; the router never re-implements spawn/parse/redact. */
 export interface Backend {
   readonly name: BackendName;
+  /** OS-level sandboxing this backend's spawned process runs under. "os" =
+   * codex's `--sandbox workspace-write`; "none" = no OS sandbox (grok,
+   * opencode, claude all run unsandboxed today). */
+  readonly containment: "os" | "none";
   /** Derive the true provider for an entry, rejecting a declared mislabel. */
   provider(entry: Entry): string;
   /** Capabilities this entry satisfies. */

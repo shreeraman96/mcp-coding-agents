@@ -11,6 +11,7 @@ const execFile = promisify(execFileCallback);
 
 export class GrokBackend implements Backend {
   readonly name = "grok" as const;
+  readonly containment = "none" as const;
 
   // Provider is fixed for grok; deriveProvider centralizes the rule.
   provider(_entry: Entry): string {

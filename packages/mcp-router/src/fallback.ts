@@ -136,6 +136,9 @@ export async function runChain(args: RunChainArgs, deps: FallbackDeps): Promise<
         timeoutSec: budget,
         signal: args.signal,
         onHeartbeat: undefined,
+        permissionMode: entry.permissionMode,
+        allowedTools: entry.allowedTools,
+        sandbox: entry.sandbox,
       });
     } catch (err) {
       // A backend that THROWS before/while starting (e.g. a model string that

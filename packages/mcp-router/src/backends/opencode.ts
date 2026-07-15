@@ -11,6 +11,7 @@ const execFile = promisify(execFileCallback);
 
 export class OpencodeBackend implements Backend {
   readonly name = "opencode" as const;
+  readonly containment = "none" as const;
 
   provider(entry: Entry): string {
     return deriveProvider("opencode", entry.model);
