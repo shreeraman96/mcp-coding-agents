@@ -1,38 +1,59 @@
 # mcp-orchestrate
 
-An MCP stdio server that routes a coding task to a **model tier** you configure
-(`light` / `standard` / `heavy`), filters by **capability** (e.g. `vision`), and
-falls back to the next configured backend **only on a fast, clean failure with a
-byte-identical git tree**.
+Send every coding task to the right-priced model automatically — cheap models for
+the grunt work, your heavy hitter for the hard problems — and never lose work to a
+failed backend. `mcp-orchestrate` is one MCP server that maps three tiers
+(`light` / `standard` / `heavy`) onto the coding CLIs you already run — opencode,
+grok, and codex — with capability filtering, cooldowns, and a fallback that only
+retries on a **fast, clean failure with a byte-identical git tree**.
 
-The calling assistant (any MCP client — Claude Code, Codex, Cursor, …) routes by
-*intent* — it picks a tier with full task context. The router owns *reliability*:
-the tier→model mapping, capability filtering, cooldowns, and a safety-gated
-fallback. It never invents a model, and **nothing about any author's setup is
-baked in** — every mapping is yours, supplied in config.
+Works with **any MCP client** — Claude Code, Codex, Cursor, opencode, or your own.
+The calling assistant routes by *intent* (it picks a tier with full task context);
+the router owns *reliability* (the tier→model mapping, capability filtering,
+cooldowns, and a safety-gated fallback). It never invents a model — **nothing about
+any author's setup is baked in**; every mapping is yours, supplied in config.
 
-> **It spawns CLIs, not MCPs.** The router drives each backend by spawning its
-> command-line tool directly (`opencode` / `grok` / `codex`). It is *only* an MCP
-> server — it has no MCP client inside it and never calls `mcp-opencode`,
-> `mcp-grok`, or the codex MCP. Those are sibling single-backend servers over the
-> same CLIs; installing them has no effect on routing.
+```bash
+mcp-orchestrate --init      # guided setup
+```
 
-> **Honest scope (v1):** fallback fires only for **fast, clean failures** — a
-> backend that isn't installed, is rate-limited/overloaded immediately, or fails
-> auth at launch, with a byte-identical git tree. A run that edited files, timed
-> out, or exhausted the budget is **terminal** and returned as-is. This is
-> graceful fallback on fast/clean failure, not a mid-task rescue.
+## It spawns CLIs, not MCPs
+
+```
+  your MCP client ──calls──▶ mcp-orchestrate ──spawns──▶ opencode / grok / codex   (CLI binaries)
+
+  mcp-opencode, mcp-grok ── siblings: separate MCP servers over the same CLIs
+                            (the router never calls them)
+```
+
+The router is *only* an MCP server — it has no MCP client inside it, so it never
+calls `mcp-opencode`, `mcp-grok`, or the codex MCP. Whether those are installed has
+no effect on routing. Prefer plain single-backend MCPs with no routing at all?
+Install them directly (`npx -y mcp-opencode`, `npx -y mcp-grok`) and let your
+assistant call whichever it needs — they're siblings over the same CLIs, not layers
+beneath the router.
+
+## Is it for you?
+
+Use it if you run **more than one** coding-agent CLI and want cost/capability
+control without hand-picking a model every time, plus safe automatic failover. If
+you only use a single backend or a single model, you don't need the router —
+install that backend's own MCP instead.
+
+## Requirements
+
+The router spawns the backend CLIs you enable, so each must be **installed and
+authenticated**: `opencode`, `grok`, and/or `codex` (whichever your tiers use),
+plus Node.js >= 20.
 
 ## Install
 
-```bash
-npx -y mcp-orchestrate
-```
-
-Register with an MCP client (Claude Code):
+Register the stdio server with your MCP client — generic form first, then examples:
 
 ```bash
-claude mcp add router -- npx -y mcp-orchestrate
+npx -y mcp-orchestrate                                  # any MCP client spawns this
+claude mcp add orchestrate -- npx -y mcp-orchestrate    # Claude Code
+codex  mcp add orchestrate -- npx -y mcp-orchestrate    # Codex
 ```
 
 > The published package is **`mcp-orchestrate`** and its CLI command is
@@ -40,16 +61,26 @@ claude mcp add router -- npx -y mcp-orchestrate
 > `MCP_ROUTER_*` environment variables keep the `mcp-router` prefix for
 > backward compatibility.
 
-## Backends
+## Backends vs. models
 
-`mcp-orchestrate` drives the CLIs you already have installed. It does not ship
-or assume any model:
+A *backend* is the CLI program that runs the task (`opencode` / `grok` / `codex`);
+a *model* is the AI it runs (e.g. `grok-4.5`, `glm-5p2`, `gpt-5.6-terra`). One
+backend can front many models — which ones you can route to depends on how *you've*
+configured that CLI. The router never adds models; it routes to whatever your
+installed CLIs already expose. There is no separate `claude` backend — reach Claude
+models through a backend that serves them. Per backend:
 
 - **opencode** — spawned; any provider/model your OpenCode install exposes.
-- **grok** — spawned; the Grok Build CLI.
+- **grok** — spawned; the Grok Build CLI (always provider `xai`).
 - **codex** — spawned by default, or set `"advisory": true` on the entry to have
   the router return a "use the Codex MCP directly" hint instead of spawning it
   (an advisory entry needs no model and never sends your prompt anywhere).
+
+> **Honest scope (v1 fallback).** Fallback fires only for **fast, clean failures**
+> — a backend that isn't installed, is rate-limited/overloaded immediately, or
+> fails auth at launch, with a byte-identical git tree. A run that edited files,
+> timed out, or exhausted the budget is **terminal** and returned as-is. This is
+> graceful fallback on fast/clean failure, not a mid-task rescue.
 
 ## Configuration
 
