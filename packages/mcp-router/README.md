@@ -44,7 +44,9 @@ install that backend's own MCP instead.
 
 The router spawns the backend CLIs you enable, so each must be **installed and
 authenticated**: `opencode`, `grok`, `codex`, and/or `claude` (whichever your
-tiers use), plus Node.js >= 20.
+tiers use), plus Node.js >= 20. The `claude` backend authenticates via the Claude
+Code CLI's own login — run `claude login` once to use your **Claude subscription**
+(no API key needed).
 
 ## Install
 
@@ -156,7 +158,7 @@ the server refuses to read it.
   inside (default `$HOME/Projects`). This is the security boundary.
 - `MCP_ROUTER_CONFIG` — override the config path.
 
-### Validate your config: `mcp-router --check`
+### Validate your config: `mcp-orchestrate --check`
 
 Run the config doctor in your terminal (this is a CLI command, separate from the
 MCP stdio server) to confirm the server will accept your config before wiring it

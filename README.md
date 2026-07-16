@@ -45,7 +45,8 @@ The router spawns the backend CLIs you enable, so each must be **installed and
 authenticated**:
 
 - `opencode`, `grok`, `codex`, and/or `claude` (the Claude Code CLI) —
-  whichever backends your tiers use.
+  whichever backends your tiers use. For `claude`, run `claude login` once to use
+  your **Claude subscription** (no API key needed).
 - Node.js >= 20.
 
 ## Quick start
