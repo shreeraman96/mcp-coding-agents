@@ -116,7 +116,10 @@ opencode install might front Anthropic, OpenAI, Fireworks, or a local provider).
 The router never adds models; it routes to whatever your installed CLIs already
 expose. `claude` is spawned; it runs Claude Code headless (`claude -p`) on your
 **Claude subscription** (no API key), provider `anthropic`, model `opus` / `sonnet`
-/ `haiku` or a full concrete id. `codex` entries take a per-entry `sandbox`:
+/ `haiku` or a full concrete id. A claude entry can also be `"advisory": true` — the
+router then returns a "spawn a subagent yourself" hint instead of spawning, which
+is the right choice when the caller is Claude Code itself (it can run a native
+subagent — no redundant `claude -p`). `codex` entries take a per-entry `sandbox`:
 `read-only` | `workspace-write` (default) | `danger-full-access`.
 `danger-full-access` removes the OS sandbox entirely (risk-flagged by `--init`);
 `read-only` can't write files.

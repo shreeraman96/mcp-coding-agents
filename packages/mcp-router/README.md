@@ -81,7 +81,10 @@ whatever your installed CLIs already expose. Per backend:
   `"read-only"` can't write files.
 - **claude** — spawned; runs Claude Code headless (`claude -p`) on your **Claude
   subscription** (no API key needed); provider `anthropic`; model is `opus` /
-  `sonnet` / `haiku` or a full concrete id.
+  `sonnet` / `haiku` or a full concrete id. Or set `"advisory": true` to have the
+  router return a **"spawn a subagent yourself (model …)"** hint instead of
+  spawning — the right choice when the caller is Claude Code itself, which can run
+  a native subagent (no redundant `claude -p`, no prompt/repo sent anywhere).
 
 ### Claude backend: safety & scope
 

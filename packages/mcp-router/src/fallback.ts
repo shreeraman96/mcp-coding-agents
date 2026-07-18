@@ -92,9 +92,16 @@ export async function runChain(args: RunChainArgs, deps: FallbackDeps): Promise<
     // uses that backend's own MCP), so they are exempt from the cross-provider
     // egress gate and are resolved before it.
     if (entry.advisory === true) {
+      // Backend-aware advisory hint. `claude` is the caller's own platform when
+      // routed from Claude Code, so the useful instruction is "spawn a subagent
+      // yourself" (the caller has a native Task/subagent tool) rather than "use
+      // the claude MCP". Other backends ship their own MCP servers, so the hint
+      // points the caller there. Either way the router runs nothing.
+      const modelSuffix = entry.model ? ` (model ${entry.model})` : "";
       const text =
-        `Advisory tier: run this task via the '${entry.backend}' MCP server directly` +
-        (entry.model ? ` (model ${entry.model})` : "");
+        entry.backend === "claude"
+          ? `Advisory tier: handle this task yourself — spawn a subagent${modelSuffix} rather than having the router run it.`
+          : `Advisory tier: run this task via the '${entry.backend}' MCP server directly${modelSuffix}.`;
       trace.push({ entry: entry.name, reason: "ok", provenance: "exit", elapsedSec: 0, editedTree: false });
       return { ok: true, servedBy: entry, trace, crossProviderNotice, text };
     }

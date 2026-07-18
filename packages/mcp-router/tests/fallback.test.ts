@@ -669,8 +669,29 @@ describe("runChain eligibility matrix", () => {
     expect(result.ok).toBe(true);
     expect(result.servedBy?.name).toBe("heavy");
     expect(result.text).toMatch(/Advisory/i);
+    expect(result.text).toContain("via the 'codex' MCP server directly");
     expect(result.trace).toHaveLength(1);
     expect(result.trace[0]).toMatchObject({ entry: "heavy", reason: "ok", editedTree: false });
+    expect(b1.runCount).toBe(0);
+  });
+
+  it("11b. advisory claude entry tells the caller to spawn a subagent (never runs the backend)", async () => {
+    const b1 = new FakeBackend("claude", [okOutcome("should-not-run")]);
+    const entry1 = makeEntry({
+      name: "heavy",
+      backend: "claude",
+      provider: "anthropic",
+      model: "opus",
+      advisory: true,
+    });
+    const deps = makeDeps({ backends: { claude: b1 } });
+
+    const result = await run([entry1], deps);
+
+    expect(result.ok).toBe(true);
+    expect(result.text).toContain("spawn a subagent");
+    expect(result.text).toContain("model opus");
+    expect(result.text).not.toContain("MCP server");
     expect(b1.runCount).toBe(0);
   });
 
