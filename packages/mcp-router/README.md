@@ -158,6 +158,45 @@ the server refuses to read it.
   inside (default `$HOME/Projects`). This is the security boundary.
 - `MCP_ROUTER_CONFIG` — override the config path.
 
+### Running orchestrate in multiple clients
+
+Registering `orchestrate` in more than one MCP client (say Claude Code **and**
+Codex) is fully supported. Each client spawns its **own** server process, and the
+server has no idea which client launched it — so routing is driven entirely by the
+config file each process reads.
+
+**Shared config (the default).** With plain
+`claude mcp add orchestrate -- npx -y mcp-orchestrate` and the equivalent
+`codex mcp add`, neither sets `MCP_ROUTER_CONFIG`, so **both read the same**
+`~/.config/mcp-router/config.json`. A `route(tier: "heavy", …)` call does the same
+thing from either client. This is the normal setup and needs nothing extra.
+
+**One caveat — self-routing.** If a tier maps to the `claude` backend and you call
+it *from Claude Code*, the route is Claude → orchestrate → a fresh `claude -p`
+sub-run. It still works (an isolated, autonomous sub-run with clean context), but
+it's redundant if your intent was "reach a *different* model." The same applies to
+routing a `codex` tier from Codex.
+
+**Per-client configs (for cross-model setups).** To make each client route to a
+different model, point each at its own config with `MCP_ROUTER_CONFIG`:
+
+```bash
+# Claude Code → its own config (e.g. heavy → codex/grok, a non-Claude model)
+claude mcp add orchestrate \
+  -e MCP_ROUTER_CONFIG=$HOME/.config/mcp-router/claude.json \
+  -- npx -y mcp-orchestrate
+
+# Codex → its own config (e.g. heavy → claude · opus on your subscription)
+codex mcp add orchestrate \
+  --env MCP_ROUTER_CONFIG=$HOME/.config/mcp-router/codex.json \
+  -- npx -y mcp-orchestrate
+```
+
+Each config file must still be mode `0600` and owned by you. `MCP_ROUTER_ROOTS` can
+differ per client the same way. Validate each with
+`MCP_ROUTER_CONFIG=<path> mcp-orchestrate --check`. Changes take effect when the
+client next restarts (the running server process holds its config in memory).
+
 ### Validate your config: `mcp-orchestrate --check`
 
 Run the config doctor in your terminal (this is a CLI command, separate from the

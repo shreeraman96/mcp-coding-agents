@@ -64,6 +64,12 @@ claude mcp add orchestrate -- npx -y mcp-orchestrate
 codex mcp add orchestrate -- npx -y mcp-orchestrate
 ```
 
+Registering it in more than one client is fine — each spawns its own server
+process, and by default they share `~/.config/mcp-router/config.json`. To make each
+client route to a *different* model (e.g. Codex → Claude Opus, Claude Code →
+codex/grok), give each its own config via `MCP_ROUTER_CONFIG` — see
+[Running orchestrate in multiple clients](./packages/mcp-router/README.md#running-orchestrate-in-multiple-clients).
+
 Then configure your tiers (you choose every model — nothing is baked in):
 
 ```bash
